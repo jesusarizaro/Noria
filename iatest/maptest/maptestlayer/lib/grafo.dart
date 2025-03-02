@@ -4,11 +4,14 @@ import 'package:flutter/services.dart';
 // import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+
 class Nodo {
   final LatLng posicion;
   final List<Conexion> conexiones = [];
+  final bool esEscalera;
+  final bool esRampa;
 
-  Nodo(this.posicion);
+  Nodo(this.posicion, {this.esEscalera = false, this.esRampa = false});
 }
 
 class Conexion {
@@ -21,20 +24,24 @@ class Conexion {
 class GrafoCampus {
   final Map<String, Nodo> nodos = {};
 
-  Nodo _obtenerOCrearNodo(double lat, double lon) {
+  Nodo _obtenerOCrearNodo(double lat, double lon, {bool esEscalera = false, bool esRampa = false}) {
     String clave = '$lat,$lon';
     if (!nodos.containsKey(clave)) {
-      nodos[clave] = Nodo(LatLng(lat, lon));
+      nodos[clave] = Nodo(LatLng(lat, lon), esEscalera:esEscalera, esRampa: esRampa);
     }
     return nodos[clave]!;
   }
 
-  Future<void> cargarDesdeGeoJSON(String ruta) async {
+Future<void> cargarDesdeGeoJSON(String ruta) async {
     final datos = jsonDecode(await rootBundle.loadString(ruta));
 
     for (var feature in datos['features']) {
-      if (feature['geometry']['type'] == 'LineString') {
-        var coords = feature['geometry']['coordinates'];
+      final geometry = feature['geometry'];
+      final properties = feature['properties'] ?? {};
+      final type = geometry['type'];
+
+      if (type == 'LineString') {
+        var coords = geometry['coordinates'];
 
         for (int i = 0; i < coords.length - 1; i++) {
           var coordInicio = coords[i];
@@ -43,17 +50,22 @@ class GrafoCampus {
           Nodo inicio = _obtenerOCrearNodo(coordInicio[1], coordInicio[0]);
           Nodo fin = _obtenerOCrearNodo(coordFin[1], coordFin[0]);
 
-          double distancia = Distance()
-              .as(LengthUnit.Meter, inicio.posicion, fin.posicion);
+          double distancia = Distance().as(LengthUnit.Meter, inicio.posicion, fin.posicion);
 
           inicio.conexiones.add(Conexion(fin, distancia));
           fin.conexiones.add(Conexion(inicio, distancia));
         }
       }
+
+      if (type == 'Point') {
+        var coord = geometry['coordinates'];
+        bool esEscalera = properties['name'] == 'Escalera' || properties['name'] == 'Escaleras';
+        bool esRampa = properties['ramp'] == 'yes' || properties['name'] == 'Rampa';
+        _obtenerOCrearNodo(coord[1], coord[0], esEscalera: esEscalera, esRampa: esRampa);
+      }
     }
   }
-
-  List<LatLng> encontrarRuta(LatLng inicio, LatLng fin) {
+  List<LatLng> encontrarRuta(LatLng inicio, LatLng fin, bool modoAccesible) {
     final nodoInicio = _nodoMasCercano(inicio);
     final nodoFin = _nodoMasCercano(fin);
 
@@ -75,11 +87,13 @@ class GrafoCampus {
 
       if (actual == nodoFin) break;
 
-      for (var vecino in actual.conexiones) {
-        double alt = distancias[actual]! + vecino.distancia;
-        if (alt < distancias[vecino.destino]!) {
-          distancias[vecino.destino] = alt;
-          anteriores[vecino.destino] = actual;
+      for (var conexion in actual.conexiones) {
+        if (modoAccesible && conexion.destino.esEscalera) continue; // Evita escaleras si el modo accesible está activado
+
+        double alt = distancias[actual]! + conexion.distancia;
+        if (alt < distancias[conexion.destino]!) {
+          distancias[conexion.destino] = alt;
+          anteriores[conexion.destino] = actual;
         }
       }
     }
@@ -92,6 +106,7 @@ class GrafoCampus {
       paso = anteriores[paso];
     }
 
+    print("📍 Ruta encontrada con ${ruta.length} puntos.");
     return ruta;
   }
 
@@ -106,7 +121,8 @@ class GrafoCampus {
         minDistancia = distancia;
       }
     }
-
-    return cercano!;
+    return cercano ?? nodos.values.first;
   }
 }
+
+  
