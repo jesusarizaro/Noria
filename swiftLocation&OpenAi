@@ -1,0 +1,96 @@
+import SwiftUI
+import MapKit
+import CoreLocation
+
+struct ContentView: View {
+    @StateObject private var locationManager = LocationManager()
+    @State private var userMessage: String = ""
+    @State private var chatResponse: String = "Escribe algo para comenzar..."
+    private let openAIService = OpenAIService()
+    
+    var body: some View {
+        VStack {
+            if let location = locationManager.location {
+                Text("Latitud: \(String(format: "%.12f", location.latitude))")
+                Text("Longitud: \(String(format: "%.12f", location.longitude))")
+            } else {
+                Text("Obteniendo ubicación...")
+            }
+            
+            Map(position: .constant(.userLocation(fallback: .automatic)))
+                .frame(height: 300)
+                .cornerRadius(10)
+            
+            Spacer()
+            
+            Text("Chat con OpenAI")
+                .font(.headline)
+            
+            Text(chatResponse)
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(Color.gray.opacity(0.2))
+                .cornerRadius(10)
+            
+            TextField("Escribe tu mensaje...", text: $userMessage)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .padding()
+            
+            Button("Enviar") {
+                sendMessage()
+            }
+            .padding()
+            .background(Color.blue)
+            .foregroundColor(.white)
+            .cornerRadius(8)
+            
+        }
+        .padding()
+        .onAppear {
+            locationManager.requestPermission()
+        }
+    }
+    
+    func sendMessage() {
+        openAIService.sendMessage(userMessage) { response in
+            if let response = response {
+                chatResponse = response
+            } else {
+                chatResponse = "Error al obtener respuesta."
+            }
+        }
+    }
+}
+
+// MARK: - Location Manager
+class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    private var locationManager = CLLocationManager()
+    @Published var location: CLLocationCoordinate2D?
+
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+    }
+
+    func requestPermission() {
+        locationManager.requestWhenInUseAuthorization()
+        locationManager.startUpdatingLocation()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        if let lastLocation = locations.last {
+            DispatchQueue.main.async {
+                self.location = lastLocation.coordinate
+            }
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("Error obteniendo ubicación: \(error.localizedDescription)")
+    }
+}
+
+#Preview {
+    ContentView()
+}
