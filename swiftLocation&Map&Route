@@ -1,0 +1,249 @@
+import SwiftUI
+import MapKit
+import CoreLocation
+
+// MARK: - LocationManager (Para obtener la ubicación en tiempo real)
+class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    private var locationManager = CLLocationManager()
+    @Published var location: CLLocationCoordinate2D?
+
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        locationManager.distanceFilter = kCLDistanceFilterNone
+        locationManager.allowsBackgroundLocationUpdates = true
+        locationManager.pausesLocationUpdatesAutomatically = false
+        requestPermission()
+    }
+
+    func requestPermission() {
+        locationManager.requestWhenInUseAuthorization()
+        locationManager.startUpdatingLocation()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        if let lastLocation = locations.last {
+            DispatchQueue.main.async {
+                self.location = lastLocation.coordinate
+            }
+        }
+    }
+}
+
+// MARK: - ContentView
+struct ContentView: View {
+    @StateObject private var locationManager = LocationManager()
+
+    @State private var mapRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 11.0194785545021, longitude: -74.85043187609091),
+        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+    )
+
+    @State private var polylines: [MKPolyline] = []
+    @State private var markers: [MKPointAnnotation] = []
+    @State private var caminos: [[CLLocationCoordinate2D]] = [] // Rutas del GeoJSON
+
+    @State private var seleccionandoInicio = false
+    @State private var seleccionandoFin = false
+    @State private var puntoInicio: CLLocationCoordinate2D?
+    @State private var puntoFin: CLLocationCoordinate2D?
+    @State private var rutaOptima: MKPolyline?
+
+    var body: some View {
+        VStack {
+            MapView(region: $mapRegion, polylines: polylines, markers: markers, rutaOptima: rutaOptima, userLocation: locationManager.location, onMapTap: handleMapTap)
+                .frame(height: 400)
+                .cornerRadius(10)
+                .onAppear {
+                    cargarGeoJSON()
+                    locationManager.requestPermission()
+                }
+
+            HStack {
+                Button("📍 Seleccionar Inicio") {
+                    seleccionandoInicio = true
+                    seleccionandoFin = false
+                }
+                .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(8)
+
+                Button("📍 Seleccionar Fin") {
+                    seleccionandoInicio = false
+                    seleccionandoFin = true
+                }
+                .padding()
+                .background(Color.red)
+                .foregroundColor(.white)
+                .cornerRadius(8)
+            }
+
+            Button("🔍 Calcular Ruta") {
+                calcularRutaMasCorta()
+            }
+            .padding()
+            .background(Color.green)
+            .foregroundColor(.white)
+            .cornerRadius(8)
+
+            Spacer()
+        }
+        .padding()
+    }
+
+    /// Manejo del toque en el mapa para seleccionar puntos
+    func handleMapTap(coordinate: CLLocationCoordinate2D) {
+        if seleccionandoInicio {
+            puntoInicio = coordinate
+            seleccionandoInicio = false
+        } else if seleccionandoFin {
+            puntoFin = coordinate
+            seleccionandoFin = false
+        }
+
+        actualizarMarcadores()
+    }
+
+    /// Actualiza los marcadores en el mapa
+    func actualizarMarcadores() {
+        markers.removeAll()
+
+        if let inicio = puntoInicio {
+            let marcadorInicio = MKPointAnnotation()
+            marcadorInicio.coordinate = inicio
+            marcadorInicio.title = "Inicio"
+            markers.append(marcadorInicio)
+        }
+
+        if let fin = puntoFin {
+            let marcadorFin = MKPointAnnotation()
+            marcadorFin.coordinate = fin
+            marcadorFin.title = "Fin"
+            markers.append(marcadorFin)
+        }
+    }
+
+    /// Cargar las rutas del GeoJSON
+    func cargarGeoJSON() {
+        if let url = Bundle.main.url(forResource: "Layers", withExtension: "geojson") {
+            do {
+                let data = try Data(contentsOf: url)
+                let geojson = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+
+                if let features = geojson?["features"] as? [[String: Any]] {
+                    for feature in features {
+                        if let geometry = feature["geometry"] as? [String: Any],
+                           let type = geometry["type"] as? String {
+
+                            if type == "LineString", let coords = geometry["coordinates"] as? [[Double]] {
+                                let polylineCoords = coords.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }
+                                caminos.append(polylineCoords)
+                            }
+                        }
+                    }
+                }
+            } catch {
+                print("Error cargando GeoJSON: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    /// Función para calcular la ruta más corta
+    func calcularRutaMasCorta() {
+        guard let inicio = puntoInicio, let fin = puntoFin else { return }
+
+        let rutaCorta = [inicio, fin] // Aquí deberías implementar el algoritmo de Dijkstra
+        if !rutaCorta.isEmpty {
+            let nuevaRutaOptima = MKPolyline(coordinates: rutaCorta, count: rutaCorta.count)
+
+            DispatchQueue.main.async {
+                self.rutaOptima = nuevaRutaOptima
+            }
+        }
+    }
+}
+
+// MARK: - MapView (Vista del mapa)
+struct MapView: UIViewRepresentable {
+    @Binding var region: MKCoordinateRegion
+    var polylines: [MKPolyline]
+    var markers: [MKPointAnnotation]
+    var rutaOptima: MKPolyline?
+    var userLocation: CLLocationCoordinate2D?
+    var onMapTap: ((CLLocationCoordinate2D) -> Void)?
+
+    func makeUIView(context: Context) -> MKMapView {
+        let mapView = MKMapView()
+        mapView.delegate = context.coordinator
+        mapView.setRegion(region, animated: true)
+
+        let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        mapView.addGestureRecognizer(tapGesture)
+
+        return mapView
+    }
+
+    func updateUIView(_ uiView: MKMapView, context: Context) {
+        uiView.removeOverlays(uiView.overlays)
+        uiView.addOverlays(polylines) // Todas las rutas en azul
+
+        if let rutaOptima = rutaOptima {
+            uiView.addOverlay(rutaOptima) // Agregar la ruta óptima en verde
+        }
+
+        uiView.removeAnnotations(uiView.annotations)
+        uiView.addAnnotations(markers)
+
+        if let userLocation = userLocation {
+            let userMarker = MKPointAnnotation()
+            userMarker.coordinate = userLocation
+            userMarker.title = "Mi Ubicación"
+            uiView.addAnnotation(userMarker)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        return Coordinator(self, onMapTap: onMapTap)
+    }
+
+    class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: MapView
+        var onMapTap: ((CLLocationCoordinate2D) -> Void)?
+
+        init(_ parent: MapView, onMapTap: ((CLLocationCoordinate2D) -> Void)?) {
+            self.parent = parent
+            self.onMapTap = onMapTap
+        }
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            let mapView = gesture.view as! MKMapView
+            let touchPoint = gesture.location(in: mapView)
+            let coordinate = mapView.convert(touchPoint, toCoordinateFrom: mapView)
+
+            DispatchQueue.main.async {
+                self.onMapTap?(coordinate)
+            }
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            let renderer = MKPolylineRenderer(polyline: overlay as! MKPolyline)
+
+            if overlay === parent.rutaOptima {
+                renderer.strokeColor = UIColor.green
+                renderer.lineWidth = 5
+            } else {
+                renderer.strokeColor = UIColor.blue
+                renderer.lineWidth = 3
+            }
+
+            return renderer
+        }
+    }
+}
+
+#Preview {
+    ContentView()
+}
+
