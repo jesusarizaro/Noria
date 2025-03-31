@@ -9,7 +9,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:http/http.dart' as http;
 import 'grafo.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
 void main() => runApp(const CampusMapApp());
 
 class CampusMapApp extends StatelessWidget {
@@ -66,6 +66,8 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
   bool mostrarEdificios = true;
   bool mostrarMarcadores = true;
   bool modoAccesible = false;
+  
+  String? _userName;
 
   @override
   void initState() {
@@ -77,6 +79,7 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
     _initLocation();
     _initSpeech();
     // _initSpeechGPT();
+    _checkUserName();
   }
 
   @override
@@ -84,7 +87,63 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
     _positionStreamSubscription?.cancel();
     super.dispose();
   }
-
+  Future<void> _checkUserName() async {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? storedName = prefs.getString('userName');
+      if (storedName == null) {
+        // Se pregunta el nombre después de que se haya renderizado el widget
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _askUserName();
+        });
+      } else {
+        setState(() {
+          _userName = storedName;
+        });
+        _speakWelcomeMessage();
+      }
+    }
+  
+  // Muestra un diálogo para pedir el nombre del usuario.
+  void _askUserName() {
+    String tempName = "";
+    showDialog(
+      context: context,
+      barrierDismissible: false, // No se cierra sin ingresar un nombre.
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('¿Cómo te gustaría que te llame?'),
+          content: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(hintText: "Ingresa tu nombre"),
+            onChanged: (value) {
+              tempName = value;
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                if (tempName.trim().isNotEmpty) {
+                  SharedPreferences prefs = await SharedPreferences.getInstance();
+                  await prefs.setString('userName', tempName);
+                  setState(() {
+                    _userName = tempName;
+                  });
+                  Navigator.of(context).pop();
+                  _speakWelcomeMessage();
+                }
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  Future<void> _speakWelcomeMessage() async {
+    String message = _userName != null ? 'Hola, $_userName! A dónde irémos hoy?':
+    await _flutterTts.setLanguage('es-ES');
+    await _flutterTts.speak(message); 
+  }
   // Inicializa los servicios de localización.
   Future<void> _initLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
