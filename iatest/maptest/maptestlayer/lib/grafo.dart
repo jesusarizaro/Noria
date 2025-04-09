@@ -54,9 +54,28 @@ class GrafoCampus {
           Nodo fin = _obtenerOCrearNodo(coordFin[1], coordFin[0], esEscalera: esEscalera, esRampa: esRampa);
 
           double distancia = Distance().as(LengthUnit.Meter, inicio.posicion, fin.posicion);
+          double intervalo = 5.0; // Distancia entre nodos en metros
+          int numNodosIntermedios = (distancia / intervalo).floor();
 
-          inicio.conexiones.add(Conexion(fin, distancia));
-          fin.conexiones.add(Conexion(inicio, distancia));
+
+          List<Nodo> nodosSegmento = [inicio];
+
+          // Crear nodos intermedios
+          for (int j = 1; j < numNodosIntermedios; j++) {
+            double latInterpolada = coordInicio[1] + (coordFin[1] - coordInicio[1]) * (j / numNodosIntermedios);
+            double lonInterpolada = coordInicio[0] + (coordFin[0] - coordInicio[0]) * (j / numNodosIntermedios);
+            Nodo intermedio = _obtenerOCrearNodo(latInterpolada, lonInterpolada, esEscalera: esEscalera, esRampa: esRampa);
+            nodosSegmento.add(intermedio);
+          }
+          // Agrega el nodo final
+          nodosSegmento.add(fin);
+
+          // Conectar los nodos consecutivos del segmento
+          for (int j = 0; j < nodosSegmento.length - 1; j++) {
+            double dist = Distance().as(LengthUnit.Meter, nodosSegmento[j].posicion, nodosSegmento[j+1].posicion);
+            nodosSegmento[j].conexiones.add(Conexion(nodosSegmento[j+1], dist));
+            nodosSegmento[j+1].conexiones.add(Conexion(nodosSegmento[j], dist));
+          }
         }
       }
 
