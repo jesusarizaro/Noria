@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:http/http.dart' as http;
 import 'grafo.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
 void main() => runApp(const CampusMapApp());
 
 class CampusMapApp extends StatelessWidget {
@@ -44,6 +46,8 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
   LatLng? puntoInicio;
   LatLng? puntoFin;
   List<LatLng> rutaOptima = [];
+  String _location = '';
+  
 
   // Seguimiento de la posición actual
   Position? _currentPosition;
@@ -66,7 +70,7 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
   bool mostrarEdificios = true;
   bool mostrarMarcadores = true;
   bool modoAccesible = false;
-  
+  Timer? _timer;
   String? _userName;
 
   @override
@@ -80,11 +84,13 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
     _initSpeech();
     // _initSpeechGPT();
     _checkUserName();
+    _updateLocationAndTime();
   }
 
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
+    _timer?.cancel();
     super.dispose();
   }
   Future<void> _checkUserName() async {
@@ -191,6 +197,66 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
     }
   }
 
+  Future<void> _updateLocationAndTime() async {
+    var locationStatus = await Permission.location.status;
+    if (locationStatus.isDenied){
+      await Permission.location.request();
+    }
+    if (locationStatus.isGranted){
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      setState(() {
+        _location = 
+            "Latitud: ${position.latitude}, Longitud: ${position.longitude}, Timestamp:${position.timestamp.toLocal().toString()}";
+      });
+    } else {
+      setState(() {
+        _location = "Location permission denied.";
+      });
+    }
+  }
+  bool isValidIP(String ipAddress){
+    try {
+      InternetAddress(ipAddress);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> sendUDP(double latitude, double longitude, String timestamp) async {
+    try {
+      final udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      String message = "Latitud:$latitude, Longitud:$longitude, Timestamp:$timestamp";
+      List<int> data = utf8.encode(message);
+
+      List<Map<String, dynamic>> destinations = [
+        {'ip': '3.84.202.213', 'port': 3000},
+      ];
+
+      for (var destination in destinations) {
+        udpSocket.send(
+          data,
+          InternetAddress(destination['ip']),
+          destination['port'],
+        );
+        print('Datos enviados a ${destination['ip']}:${destination['port']}');
+      }
+      udpSocket.close();
+    } catch (e) {
+      print('Error al enviar datos UDP: $e');
+    }
+  }
+
+  void sendData() {
+    if (_timer != null) {
+      _timer!.cancel();
+    }
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    Geolocator.getCurrentPosition().then((position) {
+      sendUDP(position.latitude, position.longitude, position.timestamp.toLocal().toString());
+      });
+    });
+  }
   // Inicializa SpeechToText para solicitudes GPT.
   // Future<void> _initSpeechGPT() async {
   //   bool available = await _speechGPT.initialize(
@@ -222,6 +288,7 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
               setState(() {
                 _isListening = false;
                 _lastWords = command;
+                sendData();
               });
             }
           },
@@ -290,7 +357,7 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
   // Envía la solicitud a la API de ChatGPT y reproduce la respuesta por voz.
   Future<void> _sendGPTRequest(String prompt) async {
     // Reemplaza la URL con la de tu backend o endpoint
-    final String url = 'http://54.172.1.88:5000/ask'; 
+    final String url = 'http://3.84.202.213:2500/ask'; 
     try {
       final response = await http.post(
         Uri.parse(url),
@@ -301,8 +368,22 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
         print("Response body: ${response.body}");
         final data = jsonDecode(response.body);
         String gptResponse = data['response'] ?? "No se recibió la respuesta de GPT.";
-        print("Respuesta de GPT: $gptResponse");
+        String? destino = data['destino'];
+        print("Respuesta de GPT: $gptResponse, destino: $destino");
         await _flutterTts.speak(gptResponse);
+
+        if (destino != null) {
+          final matched = availableDirections.firstWhere(
+            (direction) => direction['name'].toString().toLowerCase().contains(destino.toLowerCase()),
+            orElse: () => {},
+          );
+          if (matched.isNotEmpty) {
+            setState(() {
+              puntoFin = matched['latlng'];
+            });
+            calcularRutaInteractiva();
+          }
+        }
       } else {
         print("Error en la API GPT: ${response.statusCode}");
         await _flutterTts.speak("Error en la respuesta de la API");
