@@ -381,6 +381,7 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
             setState(() {
               puntoFin = matched['latlng'];
             });
+            sendData();
             calcularRutaInteractiva();
           }
         }
@@ -526,19 +527,19 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
         title: const Text('Campus Map'),
         actions: [
           // Botón para reconocimiento de voz para navegación
-          IconButton(
-            icon: const Icon(Icons.mic),
-            onPressed: _toggleListening,
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.mic),
+          //   onPressed: _toggleListening,
+          // ),
           // Botón para reconocimiento de voz para solicitudes GPT
           IconButton(
             icon: const Icon(Icons.mic_external_on),
             onPressed: _toggleGPTListening,
           ),
-          IconButton(
-            icon: const Icon(Icons.record_voice_over),
-            onPressed: _startVoiceNavigation,
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.record_voice_over),
+          //   onPressed: _startVoiceNavigation,
+          // ),
           IconButton(
             icon: Icon(mostrarEdificios ? Icons.layers : Icons.layers_clear),
             onPressed: () {
