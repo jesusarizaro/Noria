@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <true/>
+        <key>UISceneConfigurations</key>
+        <dict>
+            <key>UIWindowSceneSessionRoleApplication</key>
+            <array>
+                <dict>
+                    <key>UISceneConfigurationName</key>
+                    <string>Default Configuration</string>
+                    <key>UISceneDelegateClassName</key>
+                    <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+                </dict>
+            </array>
+        </dict>
+    </dict>
+
+    <!-- Permisos que ya tenías agregados -->
+    <key>NSCameraUsageDescription</key>
+    <string>Necesitamos acceso a la cámara para mostrar contenido en Realidad Aumentada.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Necesitamos tu ubicación para orientarte correctamente mientras navegas.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Necesitamos acceso continuo a tu ubicación para ofrecerte una guía precisa en todo momento.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Utilizamos el micrófono para recibir comandos de voz del usuario.</string>
+    <key>NSMotionUsageDescription</key>
+    <string>Necesitamos acceso a los sensores de movimiento para mejorar la precisión del posicionamiento en AR.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Utilizamos el reconocimiento de voz para interpretar instrucciones habladas del usuario.</string>
+</dict>
+</plist>
