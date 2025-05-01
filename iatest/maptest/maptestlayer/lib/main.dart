@@ -11,7 +11,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:http/http.dart' as http;
 import 'grafo.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:permission_handler/permission_handler.dart';
+// import 'package:permission_handler/permission_handler.dart';
 void main() => runApp(const CampusMapApp());
 
 class CampusMapApp extends StatelessWidget {
@@ -81,9 +81,9 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
       setState(() {});
     });
     _initLocation();
-    _initSpeech();
+    // _initSpeech();
     // _initSpeechGPT();
-    _checkUserName();
+    // _checkUserName();
     _updateLocationAndTime();
   }
 
@@ -198,11 +198,8 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
   }
 
   Future<void> _updateLocationAndTime() async {
-    var locationStatus = await Permission.location.status;
-    if (locationStatus.isDenied){
-      await Permission.location.request();
-    }
-    if (locationStatus.isGranted){
+    bool locationStatus = await Geolocator.isLocationServiceEnabled();
+    if (!locationStatus){
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       setState(() {
         _location = 
