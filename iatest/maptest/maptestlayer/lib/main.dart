@@ -353,20 +353,33 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
 
   // Envía la solicitud a la API de ChatGPT y reproduce la respuesta por voz.
   Future<void> _sendGPTRequest(String prompt) async {
-    // Reemplaza la URL con la de tu backend o endpoint
-    final String url = 'http://3.84.202.213:2500/ask'; 
+    final prefs = await SharedPreferences.getInstance();
+    String? threadId = prefs.getString('thread_id');
+
+    final String url = 'http://3.84.202.213:2500/ask';
     try {
       final response = await http.post(
         Uri.parse(url),
         headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"prompt": prompt}),
+        body: jsonEncode({
+          "prompt": prompt,
+          if (threadId != null) "thread_id": threadId,
+        }),
       );
+
       if (response.statusCode == 200) {
-        print("Response body: ${response.body}");
         final data = jsonDecode(response.body);
         String gptResponse = data['response'] ?? "No se recibió la respuesta de GPT.";
         String? destino = data['destino'];
+        String? newThreadId = data['thread_id'];
         print("Respuesta de GPT: $gptResponse, destino: $destino");
+        print("Nuevo thread_id: $newThreadId"); 
+
+        // Guarda thread_id si es nuevo
+        if (newThreadId != null && threadId == null) {
+          await prefs.setString('thread_id', newThreadId);
+        }
+
         await _flutterTts.speak(gptResponse);
 
         if (destino != null) {
