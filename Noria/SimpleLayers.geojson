@@ -4,36 +4,115 @@
     {
       "type": "Feature",
       "properties": {
-        "name": "Punto A"
+        "name": "Bloque E"
       },
       "geometry": {
-        "type": "Point",
-        "coordinates": [-74.85034008021422, 11.017939337384334]
-      }
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "name": "Punto B"
-      },
-      "geometry": {
-        "type": "Point",
-        "coordinates": [-74.84969575497767, 11.019581091921694]
-      }
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "name": "Ruta de A a B"
-      },
-      "geometry": {
-        "type": "LineString",
         "coordinates": [
-          [-74.85034008021422, 11.017939337384334],  // Punto A
-          [-74.8497205223398, 11.01904207272814],  // Intermedio
-          [-74.84969575497767, 11.019581091921694]   // Punto B
-        ]
+          -74.85014282017843,
+          11.018646185741375
+        ],
+        "type": "Point"
       }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Puerta siete"
+      },
+      "geometry": {
+        "coordinates": [
+          -74.84967051381167,
+          11.019218332605504
+        ],
+        "type": "Point"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Bloque G"
+      },
+      "geometry": {
+        "coordinates": [
+          -74.84969743037959,
+          11.019582721796624
+        ],
+        "type": "Point"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Biblioteca"
+      },
+      "geometry": {
+        "coordinates": [
+          -74.85034181071295,
+          11.017936150577768
+        ],
+        "type": "Point"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {},
+      "geometry": {
+        "coordinates": [
+          [
+            -74.85034181071295,
+            11.017936150577768
+          ],
+          [
+            -74.85014282017843,
+            11.018646185741375
+          ],
+          [
+            -74.84967051381167,
+            11.019218332605504
+          ],
+          [
+            -74.84969743037959,
+            11.019582721796624
+          ]
+        ],
+        "type": "LineString"
+      },
+      "id": 4
+    },
+    {
+      "type": "Feature",
+      "properties": {},
+      "geometry": {
+        "coordinates": [
+          [
+            -74.8504801658578,
+            11.019564296632751
+          ],
+          [
+            -74.85065884578955,
+            11.018937382538397
+          ],
+          [
+            -74.85014282017843,
+            11.018646185741375
+          ]
+        ],
+        "type": "LineString"
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Bloque I"
+      },
+      "geometry": {
+        "coordinates": [
+          -74.8504801658578,
+          11.019564296632751
+        ],
+        "type": "Point"
+      },
+      "id": 6
     }
   ]
 }
