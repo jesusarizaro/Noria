@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Necesitamos acceso para convertir tu voz en texto.</string>
+
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Necesitamos tu ubicación para orientarte correctamente mientras navegas.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Necesitamos acceso continuo a tu ubicación para ofrecerte una guía precisa en todo momento.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Utilizamos el micrófono para recibir comandos de voz del usuario.</string>
+    <key>NSMotionUsageDescription</key>
+    <string>Necesitamos acceso a los sensores de movimiento para mejorar la precisión del posicionamiento en AR.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>La app necesita acceder a la cámara para realidad aumentada.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>172.210.67.108</key>
+            <dict>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+                <key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+                <key>NSTemporaryExceptionMinimumTLSVersion</key>
+                <string>TLSv1.0</string>
+            </dict>
+        </dict>
+    </dict>
+</dict>
+</plist>
