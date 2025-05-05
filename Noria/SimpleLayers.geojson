@@ -3,74 +3,36 @@
   "features": [
     {
       "type": "Feature",
-      "properties": {},
+      "properties": {
+        "name": "Punto A"
+      },
       "geometry": {
-        "coordinates": [
-          [
-            -74.85034962680075,
-            11.0179454380215
-          ],
-          [
-            -74.85004067665292,
-            11.018995737953475
-          ],
-          [
-            -74.8497560746477,
-            11.018926680741686
-          ],
-          [
-            -74.8496686305866,
-            11.019222409009686
-          ],
-          [
-            -74.84956879074977,
-            11.019552594355574
-          ],
-          [
-            -74.84970629192054,
-            11.019584257168532
-          ]
-        ],
-        "type": "LineString"
+        "type": "Point",
+        "coordinates": [-74.8503, 11.0179]
       }
     },
     {
       "type": "Feature",
       "properties": {
-        "name": "bloque g"
+        "name": "Punto B"
       },
       "geometry": {
-        "coordinates": [
-          -74.84969656806095,
-          11.019582324064714
-        ],
-        "type": "Point"
+        "type": "Point",
+        "coordinates": [-74.8497, 11.0196]
       }
     },
     {
       "type": "Feature",
       "properties": {
-        "name": "puerta siete"
+        "name": "Ruta de A a B"
       },
       "geometry": {
+        "type": "LineString",
         "coordinates": [
-          -74.8496686305866,
-          11.019222409009686
-        ],
-        "type": "Point"
-      }
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "name": "biblioteca"
-      },
-      "geometry": {
-        "coordinates": [
-          -74.85033990294116,
-          11.017943504917682
-        ],
-        "type": "Point"
+          [-74.8503, 11.0179],  // Punto A
+          [-74.8497, 11.0192],  // Intermedio
+          [-74.8497, 11.0196]   // Punto B
+        ]
       }
     }
   ]
