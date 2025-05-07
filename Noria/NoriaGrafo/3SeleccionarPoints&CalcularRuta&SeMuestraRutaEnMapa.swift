@@ -3,6 +3,8 @@ import MapKit
 import CoreLocation
 
 struct ContentView: View {
+    
+    //variables cambiante
     @State private var grafo = Graph()
     @State private var puntosConNombre: [Vertex] = []
     @State private var puntoInicio: Vertex?
@@ -56,7 +58,7 @@ struct ContentView: View {
     }
 
     func cargarGrafo() {
-        grafo = GeoJSONGraphBuilder.buildGraph(from: "SimpleLayers")
+        grafo = GeoJSONGraphBuilder.buildGraph(from: "ComplexLayers")
         puntosConNombre = grafo.vertices.values.filter { $0.name != nil }
         if puntosConNombre.count >= 2 {
             puntoInicio = puntosConNombre[0]
@@ -132,9 +134,77 @@ struct MapView: UIViewRepresentable {
     }
 }
 
-// MARK: - Clases del grafo
 
+
+// MARK: - 1. CLASE QUE CONSTRUYE EL GRAFO DADO UN .geojson
+class GeoJSONGraphBuilder {
+    
+    // MARK: Resumen: 1. CLASE QUE CONSTRUYE EL GRAFO DADO UN .geojson
+    //busca el archivo .geojson indicado en el proyecto
+    //saca información del archivo
+    //se va a "features" del archivo para clasificar LineString o Points
+    //toda coordenada que encuentra la hace un vértice
+    // MARK: Resultado: LO QUE APORTA ESTA CLASE AL CODE ES --> let grafo = Graph()
+    
+    //llama al archivo .geojson
+    static func buildGraph(from ComplexLayers: String) -> Graph {
+        let grafo = Graph()
+
+        //se prepara para construir el grafo
+        //busca dentro de los archivos del proyecto el nombre del .geojson
+        guard let url = Bundle.main.url(forResource: ComplexLayers, withExtension: "geojson"),
+              let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [[String: Any]] else {
+            print("❌ Error al leer el archivo GeoJSON")
+            //da el grafo construido
+            return grafo
+        }
+
+        //para la variable "features" del hilo de arriba
+        for feature in features {
+            //fragmenta la información de .geojson
+            guard let geometry = feature["geometry"] as? [String: Any],
+                  let type = geometry["type"] as? String else { continue }
+
+            //va a empezar a clasificar si es una LINESTRING o un Point
+            if type == "LineString", let coords = geometry["coordinates"] as? [[Double]] {
+                //va a fragmentar cada LineString por la cantidad de coordenadas que la conformen
+                var prevVertex: Vertex?
+                //cada coordenada la convertirá en un vértice
+                for coord in coords {
+                    //toma cada coordenada de LineString
+                    let punto = CLLocationCoordinate2D(latitude: coord[1], longitude: coord[0])
+                    let vertice = grafo.getOrCreateVertex(for: punto)
+                    if let anterior = prevVertex {
+                        grafo.connect(anterior, vertice)
+                    }
+                    //conversión de coordenadas de un LineString a vértices del grafo
+                    prevVertex = vertice
+                }
+            }
+
+            //va a empezar a clasificar si es una LineString o un POINT
+            if type == "Point", let coord = geometry["coordinates"] as? [Double] {
+                let punto = CLLocationCoordinate2D(latitude: coord[1], longitude: coord[0])
+                let nombre = (feature["properties"] as? [String: Any])?["name"] as? String
+                _ = grafo.getOrCreateVertex(for: punto, name: nombre)
+            }
+        }
+        return grafo
+    }
+}
+
+
+
+// MARK: - 2. CLASE VERTEX
 class Vertex: Hashable, Identifiable {
+    
+    // MARK: Resumen: 2. CLASE VERTEX
+    //aquí considera iguales los vértices que compartan una misma coordenada
+    //posibles conexiones con otros vértices vecinos
+    // MARK: Resultado: LO QUE APORTA ESTA CLASE AL CODE ES --> Vertex
+    
     let id = UUID()
     let coordinate: CLLocationCoordinate2D
     var name: String?
@@ -145,24 +215,51 @@ class Vertex: Hashable, Identifiable {
         self.name = name
     }
 
+    //esto define cuándo dos vértices son iguales
+    //se consideran iguales si tienen la misma latitud y longitud
     static func == (lhs: Vertex, rhs: Vertex) -> Bool {
         lhs.coordinate.latitude == rhs.coordinate.latitude &&
         lhs.coordinate.longitude == rhs.coordinate.longitude
     }
 
+    //permite que dos vértices con la misma ubicación geográfica tengan el mismo hash
+    //útil para que funcionen bien en sets.
     func hash(into hasher: inout Hasher) {
         hasher.combine(coordinate.latitude)
         hasher.combine(coordinate.longitude)
     }
 }
 
+
+
+// MARK: - 3. CLASE GRAPH (dijkstra)
 class Graph {
+    
+    // MARK: Resumen: 3. CLASE GRAPH
+    //1. Busca el vértice `start` y `end` por su `name`.
+    //2. Inicia un diccionario `distances` para guardar la distancia más corta conocida desde el inicio a cada nodo.
+    //2.1 Al principio, todos tienen `.infinity`, menos el inicio (distancia = 0).
+    //3. Usa un `Set` de nodos `unvisited` para saber a cuáles todavía no hemos llegado.
+    //4. En cada ciclo:
+    //  4.1 Busca el nodo no visitado con menor distancia conocida.
+    //  4.2 Lo marca como visitado (lo saca del set).
+    //  4.3Para cada vecino:
+    //      4.3.1 Calcula una distancia tentativa.
+    //      4.3.2 Si es más corta que la actual, actualiza.
+    //5. Si llega al nodo final (`end`), reconstruye el camino usando `previous[]`.
+    // MARK: Resultado: LO QUE APORTA ESTA CLASE AL CODE ES --> Graph
+    
+    //esta variable es un diccionario de vertices
     var vertices: [String: Vertex] = [:]
 
+    //convierte las coordenadas en un texto
     func key(for coordinate: CLLocationCoordinate2D) -> String {
         "\(coordinate.latitude),\(coordinate.longitude)"
     }
 
+    //función que busca si ya existe un vértice en una ubicación
+    //si sí, lo devuelve
+    //si no, lo crea y lo agrega al diccionario de vertices
     func getOrCreateVertex(for coordinate: CLLocationCoordinate2D, name: String? = nil) -> Vertex {
         let k = key(for: coordinate)
         if let existente = vertices[k] {
@@ -177,6 +274,7 @@ class Graph {
         }
     }
 
+    //conecta dos puntos del grafo
     func connect(_ v1: Vertex, _ v2: Vertex) {
         if !v1.neighbors.contains(v2) {
             v1.neighbors.append(v2)
@@ -186,6 +284,8 @@ class Graph {
         }
     }
 
+    //encuentra la ruta más corta entre dos puntos por nombre
+    //algoritmo Dijkstra
     func shortestPath(from startName: String, to endName: String) -> [Vertex]? {
         guard let start = vertices.values.first(where: { $0.name == startName }),
               let end = vertices.values.first(where: { $0.name == endName }) else {
@@ -225,7 +325,6 @@ class Graph {
                 }
             }
         }
-
         return nil
     }
 
@@ -233,44 +332,5 @@ class Graph {
         let loc1 = CLLocation(latitude: v1.coordinate.latitude, longitude: v1.coordinate.longitude)
         let loc2 = CLLocation(latitude: v2.coordinate.latitude, longitude: v2.coordinate.longitude)
         return loc1.distance(from: loc2)
-    }
-}
-
-class GeoJSONGraphBuilder {
-    static func buildGraph(from fileName: String) -> Graph {
-        let grafo = Graph()
-
-        guard let url = Bundle.main.url(forResource: fileName, withExtension: "geojson"),
-              let data = try? Data(contentsOf: url),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let features = json["features"] as? [[String: Any]] else {
-            print("❌ Error al leer el archivo GeoJSON")
-            return grafo
-        }
-
-        for feature in features {
-            guard let geometry = feature["geometry"] as? [String: Any],
-                  let type = geometry["type"] as? String else { continue }
-
-            if type == "LineString", let coords = geometry["coordinates"] as? [[Double]] {
-                var prevVertex: Vertex?
-                for coord in coords {
-                    let punto = CLLocationCoordinate2D(latitude: coord[1], longitude: coord[0])
-                    let vertice = grafo.getOrCreateVertex(for: punto)
-                    if let anterior = prevVertex {
-                        grafo.connect(anterior, vertice)
-                    }
-                    prevVertex = vertice
-                }
-            }
-
-            if type == "Point", let coord = geometry["coordinates"] as? [Double] {
-                let punto = CLLocationCoordinate2D(latitude: coord[1], longitude: coord[0])
-                let nombre = (feature["properties"] as? [String: Any])?["name"] as? String
-                _ = grafo.getOrCreateVertex(for: punto, name: nombre)
-            }
-        }
-
-        return grafo
     }
 }
