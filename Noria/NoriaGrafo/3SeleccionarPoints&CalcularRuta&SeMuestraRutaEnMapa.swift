@@ -3,29 +3,29 @@ import MapKit
 import CoreLocation
 
 struct ContentView: View {
-    
-    //variables cambiante
     @State private var grafo = Graph()
     @State private var puntosConNombre: [Vertex] = []
-    @State private var puntoInicio: Vertex?
-    @State private var puntoFin: Vertex?
+
+    @State private var nombreInicio: String = ""
+    @State private var nombreFin: String = ""
+    
     @State private var resultadoRuta = "Selecciona dos puntos y calcula la ruta."
     @State private var grafoRuta: [Vertex] = []
 
     var body: some View {
         VStack(spacing: 20) {
             Text("Selecciona punto de inicio")
-            Picker("Inicio", selection: $puntoInicio) {
-                ForEach(puntosConNombre) { punto in
-                    Text(punto.name ?? "-")
+            Picker("Inicio", selection: $nombreInicio) {
+                ForEach(puntosConNombre.compactMap(\.name), id: \.self) { nombre in
+                    Text(nombre)
                 }
             }
             .pickerStyle(.wheel)
 
             Text("Selecciona punto de fin")
-            Picker("Destino", selection: $puntoFin) {
-                ForEach(puntosConNombre) { punto in
-                    Text(punto.name ?? "-")
+            Picker("Destino", selection: $nombreFin) {
+                ForEach(puntosConNombre.compactMap(\.name), id: \.self) { nombre in
+                    Text(nombre)
                 }
             }
             .pickerStyle(.wheel)
@@ -61,15 +61,15 @@ struct ContentView: View {
         grafo = GeoJSONGraphBuilder.buildGraph(from: "ComplexLayers")
         puntosConNombre = grafo.vertices.values.filter { $0.name != nil }
         if puntosConNombre.count >= 2 {
-            puntoInicio = puntosConNombre[0]
-            puntoFin = puntosConNombre[1]
+            nombreInicio = puntosConNombre[0].name ?? ""
+            nombreFin = puntosConNombre[1].name ?? ""
         }
     }
 
     func calcularRuta() {
-        guard let inicio = puntoInicio?.name,
-              let fin = puntoFin?.name,
-              let ruta = grafo.shortestPath(from: inicio, to: fin) else {
+        guard !nombreInicio.isEmpty,
+              !nombreFin.isEmpty,
+              let ruta = grafo.shortestPath(from: nombreInicio, to: nombreFin) else {
             resultadoRuta = "❌ No se encontró ruta entre los puntos seleccionados"
             grafoRuta = []
             return
@@ -81,6 +81,9 @@ struct ContentView: View {
         print("🟢 Ruta encontrada: \(resultadoRuta)")
     }
 }
+
+
+
 
 // MARK: - MapView integrado
 
@@ -133,6 +136,10 @@ struct MapView: UIViewRepresentable {
         }
     }
 }
+
+
+
+
 
 
 
@@ -236,17 +243,17 @@ class Vertex: Hashable, Identifiable {
 class Graph {
     
     // MARK: Resumen: 3. CLASE GRAPH
-    //1. Busca el vértice `start` y `end` por su `name`.
-    //2. Inicia un diccionario `distances` para guardar la distancia más corta conocida desde el inicio a cada nodo.
-    //2.1 Al principio, todos tienen `.infinity`, menos el inicio (distancia = 0).
-    //3. Usa un `Set` de nodos `unvisited` para saber a cuáles todavía no hemos llegado.
+    //1. Busca el vértice start y end por su name.
+    //2. Inicia un diccionario distances para guardar la distancia más corta conocida desde el inicio a cada nodo.
+    //2.1 Al principio, todos tienen .infinity, menos el inicio (distancia = 0).
+    //3. Usa un Set de nodos unvisited para saber a cuáles todavía no hemos llegado.
     //4. En cada ciclo:
     //  4.1 Busca el nodo no visitado con menor distancia conocida.
     //  4.2 Lo marca como visitado (lo saca del set).
     //  4.3Para cada vecino:
     //      4.3.1 Calcula una distancia tentativa.
     //      4.3.2 Si es más corta que la actual, actualiza.
-    //5. Si llega al nodo final (`end`), reconstruye el camino usando `previous[]`.
+    //5. Si llega al nodo final (end), reconstruye el camino usando previous[].
     // MARK: Resultado: LO QUE APORTA ESTA CLASE AL CODE ES --> Graph
     
     //esta variable es un diccionario de vertices
