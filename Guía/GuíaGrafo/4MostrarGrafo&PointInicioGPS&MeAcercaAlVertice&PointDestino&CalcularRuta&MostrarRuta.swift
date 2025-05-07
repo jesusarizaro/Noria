@@ -3,26 +3,6 @@ import MapKit
 import CoreLocation
 
 
-class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published var userLocation: CLLocationCoordinate2D?
-    private let locationManager = CLLocationManager()
-
-    override init() {
-        super.init()
-        locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest
-        locationManager.requestWhenInUseAuthorization()
-        locationManager.startUpdatingLocation()
-    }
-
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        userLocation = locations.last?.coordinate
-    }
-}
-
-
-
-
 struct ContentView: View {
     @State private var grafo = Graph()
     @State private var puntosConNombre: [Vertex] = []
@@ -276,11 +256,30 @@ class Vertex: Hashable, Identifiable {
 }
 
 
+// MARK: - 3. CLASE LocationManager
+class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published var userLocation: CLLocationCoordinate2D?
+    private let locationManager = CLLocationManager()
 
-// MARK: - 3. CLASE GRAPH (dijkstra)
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.requestWhenInUseAuthorization()
+        locationManager.startUpdatingLocation()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        userLocation = locations.last?.coordinate
+    }
+}
+
+
+
+// MARK: - 4. CLASE GRAPH (dijkstra)
 class Graph {
     
-    // MARK: Resumen: 3. CLASE GRAPH
+    // MARK: Resumen: 4. CLASE GRAPH
     //1. Busca el vértice start y end por su name.
     //2. Inicia un diccionario distances para guardar la distancia más corta conocida desde el inicio a cada nodo.
     //2.1 Al principio, todos tienen .infinity, menos el inicio (distancia = 0).
