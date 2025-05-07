@@ -2,7 +2,15 @@ import SwiftUI
 import MapKit
 import CoreLocation
 import Combine
+import AVFoundation
 
+struct AristaInfo: Identifiable {
+    let id = UUID()
+    let inicio: CLLocationCoordinate2D
+    let fin: CLLocationCoordinate2D
+    let pies: Double
+    let orientacion: Double
+}
 
 struct ContentView: View {
     @State private var grafo = Graph()
@@ -10,15 +18,21 @@ struct ContentView: View {
     @State private var nombreFin: String = ""
     @State private var resultadoRuta = "Selecciona destino y calcula la ruta desde tu ubicación."
     @State private var grafoRuta: [Vertex] = []
+    @State private var rutaAnalizada: [AristaInfo] = []
+    @State private var giroActual = ""
+    @State private var distanciaHastaProximo = ""
+    @State private var aristaActualIndex = 0
     @StateObject private var locationManager = LocationManager()
     @StateObject private var compassManager = CompassManager()
-
+    @State private var ultimaInstruccion = ""
+    @State private var tiempoUltimaInstruccion = Date(timeIntervalSince1970: 0)
+    let speechSynthesizer = AVSpeechSynthesizer()
 
     var body: some View {
         VStack(spacing: 20) {
             Text("Selecciona punto de destino")
             Picker("Destino", selection: $nombreFin) {
-                ForEach(puntosConNombre.compactMap({ $0.name }), id: \.self) { nombre in
+                ForEach(puntosConNombre.compactMap({ $0.name }), id: \ .self) { nombre in
                     Text(nombre)
                 }
             }
@@ -31,6 +45,16 @@ struct ContentView: View {
             .background(Color.blue)
             .foregroundColor(.white)
             .cornerRadius(10)
+
+            VStack(spacing: 8) {
+                Text("🚶‍♂️ \(distanciaHastaProximo)")
+                    .font(.title3)
+                    .foregroundColor(.gray)
+                Text("🔄 Instrucción actual: \(giroActual)")
+                    .font(.headline)
+                    .foregroundColor(.orange)
+            }
+            .padding()
 
             ScrollView {
                 Text(resultadoRuta)
@@ -49,6 +73,9 @@ struct ContentView: View {
         .padding()
         .onAppear {
             cargarGrafo()
+        }
+        .onReceive(locationManager.$userLocation.compactMap { $0 }) { _ in
+            verificarGiros()
         }
     }
 
@@ -77,6 +104,68 @@ struct ContentView: View {
         resultadoRuta = ruta.map { $0.name ?? grafo.key(for: $0.coordinate) }
                             .joined(separator: " → ")
         grafoRuta = ruta
+
+        rutaAnalizada = []
+        for i in 0..<ruta.count - 1 {
+            let origen = ruta[i].coordinate
+            let destino = ruta[i + 1].coordinate
+
+            let distancia = CLLocation(latitude: origen.latitude, longitude: origen.longitude)
+                .distance(from: CLLocation(latitude: destino.latitude, longitude: destino.longitude))
+            let distanciaPies = distancia * 3.28084
+
+            let deltaLat = destino.latitude - origen.latitude
+            let deltaLon = destino.longitude - origen.longitude
+            let radians = atan2(deltaLon, deltaLat)
+            let degrees = (radians * 180 / .pi).truncatingRemainder(dividingBy: 360)
+            let orientacion = (degrees >= 0) ? degrees : degrees + 360
+
+            let info = AristaInfo(inicio: origen, fin: destino, pies: distanciaPies, orientacion: orientacion)
+            rutaAnalizada.append(info)
+        }
+        aristaActualIndex = 0
+    }
+
+    func verificarGiros() {
+        guard let ubicacionActual = locationManager.userLocation,
+              aristaActualIndex < rutaAnalizada.count else { return }
+
+        let arista = rutaAnalizada[aristaActualIndex]
+        let distancia = CLLocation(latitude: ubicacionActual.latitude, longitude: ubicacionActual.longitude)
+            .distance(from: CLLocation(latitude: arista.fin.latitude, longitude: arista.fin.longitude))
+
+        distanciaHastaProximo = String(format: "%.0f pies hasta próximo giro", distancia * 3.28084)
+
+        if distancia < 8.0 {
+            if aristaActualIndex < rutaAnalizada.count - 1 {
+                let orientacionEsperada = rutaAnalizada[aristaActualIndex + 1].orientacion
+                let orientacionUsuario = compassManager.heading
+                let diferencia = normalizarAngulo(orientacionEsperada - orientacionUsuario)
+
+                var instruccion = ""
+                if diferencia > 30 {
+                    instruccion = "Gira a la derecha"
+                } else if diferencia < -30 {
+                    instruccion = "Gira a la izquierda"
+                } else {
+                    instruccion = "Sigue recto"
+                }
+
+                if instruccion != ultimaInstruccion || Date().timeIntervalSince(tiempoUltimaInstruccion) > 8 {
+                    ultimaInstruccion = instruccion
+                    tiempoUltimaInstruccion = Date()
+                    giroActual = instruccion
+                }
+            }
+            aristaActualIndex += 1
+        }
+    }
+
+    func normalizarAngulo(_ angulo: Double) -> Double {
+        var a = angulo
+        while a < -180 { a += 360 }
+        while a > 180 { a -= 360 }
+        return a
     }
 
     func verticeMasCercano(a coordenada: CLLocationCoordinate2D) -> Vertex? {
@@ -89,6 +178,43 @@ struct ContentView: View {
         })
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+class CompassManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    private var locationManager: CLLocationManager = CLLocationManager()
+    @Published var heading: Double = 0.0
+
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.headingFilter = kCLHeadingFilterNone
+        locationManager.requestWhenInUseAuthorization()
+        if CLLocationManager.headingAvailable() {
+            locationManager.startUpdatingHeading()
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        heading = newHeading.trueHeading > 0 ? newHeading.trueHeading : newHeading.magneticHeading
+    }
+}
+
+
+
+
+
+
+
 
 
 
@@ -159,31 +285,127 @@ struct MapView: UIViewRepresentable {
 
 
 
-//MARK: - 5. BRÚJULA
-class CompassManager: NSObject, ObservableObject, CLLocationManagerDelegate {
-    private var locationManager: CLLocationManager = CLLocationManager()
+
+
+
+
+
+// MARK: - 1. CLASE QUE CONSTRUYE EL GRAFO DADO UN .geojson
+class GeoJSONGraphBuilder {
     
-    @Published var heading: Double = 0.0  // grados respecto al norte
+    // MARK: Resumen: 1. CLASE QUE CONSTRUYE EL GRAFO DADO UN .geojson
+    //busca el archivo .geojson indicado en el proyecto
+    //saca información del archivo
+    //se va a "features" del archivo para clasificar LineString o Points
+    //toda coordenada que encuentra la hace un vértice
+    // MARK: Resultado: LO QUE APORTA ESTA CLASE AL CODE ES --> let grafo = Graph()
+    
+    //llama al archivo .geojson
+    static func buildGraph(from ComplexLayers: String) -> Graph {
+        let grafo = Graph()
 
-    override init() {
-        super.init()
-        locationManager.delegate = self
-        locationManager.headingFilter = kCLHeadingFilterNone
-        locationManager.requestWhenInUseAuthorization()
-
-        if CLLocationManager.headingAvailable() {
-            locationManager.startUpdatingHeading()
+        //se prepara para construir el grafo
+        //busca dentro de los archivos del proyecto el nombre del .geojson
+        guard let url = Bundle.main.url(forResource: ComplexLayers, withExtension: "geojson"),
+              let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [[String: Any]] else {
+            print("❌ Error al leer el archivo GeoJSON")
+            //da el grafo construido
+            return grafo
         }
-    }
 
-    func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
-        // El heading en grados (0 a 360)
-        heading = newHeading.trueHeading > 0 ? newHeading.trueHeading : newHeading.magneticHeading
+        //para la variable "features" del hilo de arriba
+        for feature in features {
+            //fragmenta la información de .geojson
+            guard let geometry = feature["geometry"] as? [String: Any],
+                  let type = geometry["type"] as? String else { continue }
+
+            //va a empezar a clasificar si es una LINESTRING o un Point
+            if type == "LineString", let coords = geometry["coordinates"] as? [[Double]] {
+                //va a fragmentar cada LineString por la cantidad de coordenadas que la conformen
+                var prevVertex: Vertex?
+                //cada coordenada la convertirá en un vértice
+                for coord in coords {
+                    //toma cada coordenada de LineString
+                    let punto = CLLocationCoordinate2D(latitude: coord[1], longitude: coord[0])
+                    let vertice = grafo.getOrCreateVertex(for: punto)
+                    if let anterior = prevVertex {
+                        grafo.connect(anterior, vertice)
+                    }
+                    //conversión de coordenadas de un LineString a vértices del grafo
+                    prevVertex = vertice
+                }
+            }
+
+            //va a empezar a clasificar si es una LineString o un POINT
+            if type == "Point", let coord = geometry["coordinates"] as? [Double] {
+                let punto = CLLocationCoordinate2D(latitude: coord[1], longitude: coord[0])
+                let nombre = (feature["properties"] as? [String: Any])?["name"] as? String
+                _ = grafo.getOrCreateVertex(for: punto, name: nombre)
+            }
+        }
+        return grafo
     }
 }
 
 
-// MARK: - 4. GRAPH: cálculo de la ruta con Dijkstra
+
+// MARK: - 2. CLASE VERTEX
+class Vertex: Hashable, Identifiable {
+    
+    // MARK: Resumen: 2. CLASE VERTEX
+    //aquí considera iguales los vértices que compartan una misma coordenada
+    //posibles conexiones con otros vértices vecinos
+    // MARK: Resultado: LO QUE APORTA ESTA CLASE AL CODE ES --> Vertex
+    
+    let id = UUID()
+    let coordinate: CLLocationCoordinate2D
+    var name: String?
+    var neighbors: [Vertex] = []
+
+    init(coordinate: CLLocationCoordinate2D, name: String? = nil) {
+        self.coordinate = coordinate
+        self.name = name
+    }
+
+    //esto define cuándo dos vértices son iguales
+    //se consideran iguales si tienen la misma latitud y longitud
+    static func == (lhs: Vertex, rhs: Vertex) -> Bool {
+        lhs.coordinate.latitude == rhs.coordinate.latitude &&
+        lhs.coordinate.longitude == rhs.coordinate.longitude
+    }
+
+    //permite que dos vértices con la misma ubicación geográfica tengan el mismo hash
+    //útil para que funcionen bien en sets.
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(coordinate.latitude)
+        hasher.combine(coordinate.longitude)
+    }
+}
+
+
+// MARK: - 3. CLASE LocationManager
+class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published var userLocation: CLLocationCoordinate2D?
+    private let locationManager = CLLocationManager()
+
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.requestWhenInUseAuthorization()
+        locationManager.startUpdatingLocation()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        userLocation = locations.last?.coordinate
+    }
+}
+
+
+
+// MARK: - 4. CLASE GRAPH (dijkstra)
 class Graph {
     
     // MARK: Resumen: 4. CLASE GRAPH
@@ -276,6 +498,12 @@ class Graph {
         return nil
     }
 
+    
+    
+    
+    
+    
+
     private func distance(from v1: Vertex, to v2: Vertex) -> Double {
         let loc1 = CLLocation(latitude: v1.coordinate.latitude, longitude: v1.coordinate.longitude)
         let loc2 = CLLocation(latitude: v2.coordinate.latitude, longitude: v2.coordinate.longitude)
@@ -286,118 +514,4 @@ class Graph {
 
 
 
-// MARK: - 3. GPS
-class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published var userLocation: CLLocationCoordinate2D?
-    private let locationManager = CLLocationManager()
-
-    override init() {
-        super.init()
-        locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest
-        locationManager.requestWhenInUseAuthorization()
-        locationManager.startUpdatingLocation()
-    }
-
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        userLocation = locations.last?.coordinate
-    }
-}
-
-
-
-// MARK: - 2. POINTS A VÉRTICES
-class Vertex: Hashable, Identifiable {
-    
-    // MARK: Resumen: 2. CLASE VERTEX
-    //aquí considera iguales los vértices que compartan una misma coordenada
-    //posibles conexiones con otros vértices vecinos
-    // MARK: Resultado: LO QUE APORTA ESTA CLASE AL CODE ES --> Vertex
-    
-    let id = UUID()
-    let coordinate: CLLocationCoordinate2D
-    var name: String?
-    var neighbors: [Vertex] = []
-
-    init(coordinate: CLLocationCoordinate2D, name: String? = nil) {
-        self.coordinate = coordinate
-        self.name = name
-    }
-
-    //esto define cuándo dos vértices son iguales
-    //se consideran iguales si tienen la misma latitud y longitud
-    static func == (lhs: Vertex, rhs: Vertex) -> Bool {
-        lhs.coordinate.latitude == rhs.coordinate.latitude &&
-        lhs.coordinate.longitude == rhs.coordinate.longitude
-    }
-
-    //permite que dos vértices con la misma ubicación geográfica tengan el mismo hash
-    //útil para que funcionen bien en sets.
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(coordinate.latitude)
-        hasher.combine(coordinate.longitude)
-    }
-}
-
-
-
-
-// MARK: - 1. CONSTRUYE EL GRAFO DADO UN .geojson
-class GeoJSONGraphBuilder {
-    
-    // MARK: Resumen: 1. CLASE QUE CONSTRUYE EL GRAFO DADO UN .geojson
-    //busca el archivo .geojson indicado en el proyecto
-    //saca información del archivo
-    //se va a "features" del archivo para clasificar LineString o Points
-    //toda coordenada que encuentra la hace un vértice
-    // MARK: Resultado: LO QUE APORTA ESTA CLASE AL CODE ES --> let grafo = Graph()
-    
-    //llama al archivo .geojson
-    static func buildGraph(from ComplexLayers: String) -> Graph {
-        let grafo = Graph()
-
-        //se prepara para construir el grafo
-        //busca dentro de los archivos del proyecto el nombre del .geojson
-        guard let url = Bundle.main.url(forResource: ComplexLayers, withExtension: "geojson"),
-              let data = try? Data(contentsOf: url),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let features = json["features"] as? [[String: Any]] else {
-            print("❌ Error al leer el archivo GeoJSON")
-            //da el grafo construido
-            return grafo
-        }
-
-        //para la variable "features" del hilo de arriba
-        for feature in features {
-            //fragmenta la información de .geojson
-            guard let geometry = feature["geometry"] as? [String: Any],
-                  let type = geometry["type"] as? String else { continue }
-
-            //va a empezar a clasificar si es una LINESTRING o un Point
-            if type == "LineString", let coords = geometry["coordinates"] as? [[Double]] {
-                //va a fragmentar cada LineString por la cantidad de coordenadas que la conformen
-                var prevVertex: Vertex?
-                //cada coordenada la convertirá en un vértice
-                for coord in coords {
-                    //toma cada coordenada de LineString
-                    let punto = CLLocationCoordinate2D(latitude: coord[1], longitude: coord[0])
-                    let vertice = grafo.getOrCreateVertex(for: punto)
-                    if let anterior = prevVertex {
-                        grafo.connect(anterior, vertice)
-                    }
-                    //conversión de coordenadas de un LineString a vértices del grafo
-                    prevVertex = vertice
-                }
-            }
-
-            //va a empezar a clasificar si es una LineString o un POINT
-            if type == "Point", let coord = geometry["coordinates"] as? [Double] {
-                let punto = CLLocationCoordinate2D(latitude: coord[1], longitude: coord[0])
-                let nombre = (feature["properties"] as? [String: Any])?["name"] as? String
-                _ = grafo.getOrCreateVertex(for: punto, name: nombre)
-            }
-        }
-        return grafo
-    }
-}
 
