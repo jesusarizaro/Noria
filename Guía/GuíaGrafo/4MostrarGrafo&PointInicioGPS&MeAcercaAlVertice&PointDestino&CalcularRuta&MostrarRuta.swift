@@ -1,9 +1,8 @@
-// ✅ Agrega esto al comienzo del archivo:
 import SwiftUI
 import MapKit
 import CoreLocation
 
-// ✅ LocationManager: obtiene GPS en vivo
+
 class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var userLocation: CLLocationCoordinate2D?
     private let locationManager = CLLocationManager()
@@ -21,22 +20,22 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 }
 
-// ✅ ContentView con GPS como punto de inicio
+
+
+
 struct ContentView: View {
     @State private var grafo = Graph()
     @State private var puntosConNombre: [Vertex] = []
-
     @State private var nombreFin: String = ""
     @State private var resultadoRuta = "Selecciona destino y calcula la ruta desde tu ubicación."
     @State private var grafoRuta: [Vertex] = []
-
     @StateObject private var locationManager = LocationManager()
 
     var body: some View {
         VStack(spacing: 20) {
             Text("Selecciona punto de destino")
             Picker("Destino", selection: $nombreFin) {
-                ForEach(puntosConNombre.compactMap({ $0.name }), id: \ .self) { nombre in
+                ForEach(puntosConNombre.compactMap({ $0.name }), id: \.self) { nombre in
                     Text(nombre)
                 }
             }
@@ -86,8 +85,7 @@ struct ContentView: View {
 
         guard let destino = grafo.vertices.values.first(where: { $0.name == nombreFin }),
               let inicio = verticeMasCercano(a: gps),
-              let ruta = grafo.shortestPath(from: inicio.name ?? grafo.key(for: inicio.coordinate),
-                                            to: destino.name ?? grafo.key(for: destino.coordinate)) else {
+              let ruta = grafo.shortestPath(from: inicio.coordinate, to: destino.coordinate) else {
             resultadoRuta = "❌ No se pudo calcular ruta desde tu ubicación"
             grafoRuta = []
             return
@@ -96,8 +94,6 @@ struct ContentView: View {
         resultadoRuta = ruta.map { $0.name ?? grafo.key(for: $0.coordinate) }
                             .joined(separator: " → ")
         grafoRuta = ruta
-        print("📍 Tu ubicación GPS: \(gps.latitude), \(gps.longitude)")
-        print("🟢 Ruta encontrada: \(resultadoRuta)")
     }
 
     func verticeMasCercano(a coordenada: CLLocationCoordinate2D) -> Vertex? {
@@ -110,6 +106,8 @@ struct ContentView: View {
         })
     }
 }
+
+
 
 // ✅ Mapa con punto azul como en Find My
 struct MapView: UIViewRepresentable {
@@ -333,13 +331,10 @@ class Graph {
 
     //encuentra la ruta más corta entre dos puntos por nombre
     //algoritmo Dijkstra
-    func shortestPath(from startName: String, to endName: String) -> [Vertex]? {
-        guard let start = vertices.values.first(where: { $0.name == startName }),
-              let end = vertices.values.first(where: { $0.name == endName }) else {
-            print("❌ No se encontró alguno de los puntos")
-            return nil
-        }
-
+    func shortestPath(from startCoord: CLLocationCoordinate2D, to endCoord: CLLocationCoordinate2D) -> [Vertex]? {
+        let start = getOrCreateVertex(for: startCoord)
+        let end = getOrCreateVertex(for: endCoord)
+        
         var distances: [Vertex: Double] = [:]
         var previous: [Vertex: Vertex] = [:]
         var unvisited: Set<Vertex> = Set(vertices.values)
@@ -374,6 +369,12 @@ class Graph {
         }
         return nil
     }
+
+    
+    
+    
+    
+    
 
     private func distance(from v1: Vertex, to v2: Vertex) -> Double {
         let loc1 = CLLocation(latitude: v1.coordinate.latitude, longitude: v1.coordinate.longitude)
