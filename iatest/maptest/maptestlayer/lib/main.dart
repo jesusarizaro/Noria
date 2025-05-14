@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -48,6 +49,9 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
   List<LatLng> rutaOptima = [];
   String _location = '';
   
+  // Para el aviso del cambio de ruta
+  List<LatLng> rutaBase = [];
+  List<LatLng> rutaOriginal = [];
 
   // Seguimiento de la posición actual
   Position? _currentPosition;
@@ -514,12 +518,111 @@ class _CampusMapScreenState extends State<CampusMapScreen> {
   // Calcula la ruta óptima usando el algoritmo del grafo.
   void calcularRutaInteractiva() {
     if (puntoInicio != null && puntoFin != null) {
-      print("🔍 Buscando ruta desde $puntoInicio hasta $puntoFin");
-      rutaOptima = grafoCampus.encontrarRuta(puntoInicio!, puntoFin!, modoAccesible);
-      print("✅ Ruta calculada con ${rutaOptima.length} puntos.");
+      print("🔍 Recalculando ruta desde $puntoInicio hasta $puntoFin");
+      final nuevaRuta = grafoCampus.encontrarRuta(puntoInicio!, puntoFin!, modoAccesible);
+
+      if (rutaOriginal.isEmpty) {
+        rutaOriginal = List.from(nuevaRuta);
+        rutaBase = List.from(nuevaRuta);
+        rutaOptima = nuevaRuta;
+        print("🛣️ Ruta original y base definida con ${rutaOptima.length} puntos");
+        sendData();
+        setState(() {});
+        anunciarInstruccionesDeRuta();
+        return;
+      }
+
+      final subrutaEsperada = subrutaDesdePunto(rutaOriginal, puntoInicio!);
+
+      if (!listaDeLatLngSonIguales(nuevaRuta, subrutaEsperada)) {
+        _flutterTts.speak("Ruta recalculada debido a cambio de trayecto.");
+        rutaOriginal = List.from(nuevaRuta);
+      }
+
+      rutaOptima = nuevaRuta;
       setState(() {});
+
+      if (rutaOptima.length <= 4 && rutaOptima.length > 1) {
+        _flutterTts.speak("Estás por llegar. Prepárate para detenerte.");
+      } else if (rutaOptima.length == 1) {
+          final distanciaAlDestino = Geolocator.distanceBetween(
+            puntoInicio!.latitude,
+            puntoInicio!.longitude,
+            puntoFin!.latitude,
+            puntoFin!.longitude,
+          );
+
+          if (distanciaAlDestino < 5) {
+            _flutterTts.speak("Has llegado a tu destino.");
+            puntoFin = null;
+            rutaBase.clear();
+            rutaOriginal.clear();
+            rutaOptima.clear();
+            setState(() {});
+          } else {
+            // El GPS falló, no asumir llegada
+            print("⚠️ Ruta corta pero aún estás lejos: $distanciaAlDestino m del destino.");
+          }
+        
+      }
+
+      // Puedes activar esto si quieres instrucciones de giro al recalcular
+      // anunciarInstruccionesDeRuta();
     }
   }
+  bool listaDeLatLngSonIguales(List<LatLng> a, List<LatLng> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if ((a[i].latitude - b[i].latitude).abs() > 0.00001 ||
+          (a[i].longitude - b[i].longitude).abs() > 0.00001) return false;
+    }
+    return true;
+  }
+  List<LatLng> subrutaDesdePunto(List<LatLng> ruta, LatLng desde) {
+    int indiceMasCercano = 0;
+    double menorDistancia = double.infinity;
+
+    for (int i = 0; i < ruta.length; i++) {
+      double d = Geolocator.distanceBetween(
+        ruta[i].latitude,
+        ruta[i].longitude,
+        desde.latitude,
+        desde.longitude,
+      );
+      if (d < menorDistancia) {
+        menorDistancia = d;
+        indiceMasCercano = i;
+      }
+    }
+
+    return ruta.sublist(indiceMasCercano);
+  }
+
+  double calcularAngulo(LatLng a, LatLng b, LatLng c) {
+    final dx1 = b.longitude - a.longitude;
+    final dy1 = b.latitude - a.latitude;
+    final dx2 = c.longitude - b.longitude;
+    final dy2 = c.latitude - b.latitude;
+    final angle1 = atan2(dy1, dx1);
+    final angle2 = atan2(dy2, dx2);
+    return (angle2 - angle1) * 180 / pi;
+  }
+  void anunciarInstruccionesDeRuta() {
+    for (int i = 1; i < rutaOptima.length - 1; i++) {
+      final p1 = rutaOptima[i - 1];
+      final p2 = rutaOptima[i];
+      final p3 = rutaOptima[i + 1];
+
+      final angle = calcularAngulo(p1, p2, p3);
+
+      if (angle > 30 && angle < 150) {
+        _flutterTts.speak("Gira a la derecha pronto");
+      } else if (angle < -30 && angle > -150) {
+        _flutterTts.speak("Gira a la izquierda pronto");
+      }
+    }
+  }
+
 
   // Dispara la navegación por voz (función básica).
   Future<void> _startVoiceNavigation() async {
